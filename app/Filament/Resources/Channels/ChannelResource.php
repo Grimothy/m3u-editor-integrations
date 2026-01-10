@@ -16,6 +16,7 @@ use App\Models\ChannelFailover;
 use App\Models\CustomPlaylist;
 use App\Models\Group;
 use App\Models\Playlist;
+use App\Rules\CheckIfUrlOrLocalPath;
 use App\Traits\HasUserFiltering;
 use Exception;
 use Filament\Actions\Action;
@@ -1079,6 +1080,7 @@ class ChannelResource extends Resource
                             'string',
                             'min:1',
                             'max:1000',
+                            fn (Get $get) => $get('media_type') === 'local_file' ? new CheckIfUrlOrLocalPath(localOnly: true) : null,
                         ]),
                     TextInput::make('url_custom')
                         ->label('URL Override')

@@ -22,10 +22,9 @@ class PlaylistUrlService
      */
     public static function getChannelUrl(Channel $channel, $context = null): string
     {
-        // Check for local file media type
+        // Check for local file media type - use the channel's method
         if ($channel->media_type === MediaType::LocalFile && $channel->local_file_path) {
-            // Return the local file path with file:// protocol
-            return 'file://' . $channel->local_file_path;
+            return $channel->getEffectiveUrl();
         }
 
         // Always prefer custom URL if set (should not be transformed)

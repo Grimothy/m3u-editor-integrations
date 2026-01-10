@@ -12,6 +12,7 @@ use App\Models\PlaylistAlias;
 use App\Models\PlaylistAuth;
 use App\Services\PlaylistService;
 use App\Services\PlaylistUrlService;
+use App\Traits\StreamsLocalFiles;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
@@ -20,6 +21,7 @@ use Illuminate\Support\Facades\Redirect;
 
 class XtreamStreamController extends Controller
 {
+    use StreamsLocalFiles;
     /**
      * Authenticates a playlist using either PlaylistAuth credentials or the original method
      * (username = playlist owner's name, password = playlist UUID).
@@ -337,55 +339,5 @@ class XtreamStreamController extends Controller
 
             return Redirect::to($streamUrl);
         }
-    }
-
-    /**
-     * Stream a local media file with support for range requests
-     *
-     * @param  string  $filePath  The absolute path to the local file
-     * @return \Symfony\Component\HttpFoundation\StreamedResponse|\Illuminate\Http\Response
-     */
-    protected function streamLocalFile(string $filePath)
-    {
-        // Security: Validate the file path to prevent directory traversal
-        $realPath = realpath($filePath);
-        if ($realPath === false || !file_exists($realPath)) {
-            Log::warning('Local file not found or inaccessible', ['path' => $filePath]);
-            return response()->json(['error' => 'File not found'], 404);
-        }
-
-        // Additional security: Ensure the file is readable
-        if (!is_readable($realPath)) {
-            Log::warning('Local file is not readable', ['path' => $realPath]);
-            return response()->json(['error' => 'File not accessible'], 403);
-        }
-
-        $fileSize = filesize($realPath);
-        $mimeType = mime_content_type($realPath) ?: 'application/octet-stream';
-
-        // Create a streamed response with range support
-        return response()->stream(
-            function () use ($realPath) {
-                $stream = fopen($realPath, 'rb');
-                if ($stream === false) {
-                    return;
-                }
-
-                // Stream in chunks
-                while (!feof($stream)) {
-                    echo fread($stream, 8192);
-                    flush();
-                }
-
-                fclose($stream);
-            },
-            200,
-            [
-                'Content-Type' => $mimeType,
-                'Content-Length' => $fileSize,
-                'Accept-Ranges' => 'bytes',
-                'Cache-Control' => 'no-cache, must-revalidate',
-            ]
-        );
     }
 }
