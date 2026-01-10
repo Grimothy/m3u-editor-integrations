@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\MediaType;
 use App\Facades\PlaylistFacade;
 use App\Http\Controllers\Controller;
 use App\Models\Channel;
@@ -15,6 +16,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class M3uProxyApiController extends Controller
 {
@@ -31,6 +33,11 @@ class M3uProxyApiController extends Controller
             'playlist',
             'customPlaylist',
         ])->findOrFail($id);
+
+        // Check if this is a local file media type
+        if ($channel->media_type === MediaType::LocalFile && $channel->local_file_path) {
+            return $this->streamLocalFile($channel->local_file_path);
+        }
 
         // See if username is passed in request
         $username = $request->input('username', null);
@@ -131,6 +138,11 @@ class M3uProxyApiController extends Controller
             'playlist',
             'customPlaylist',
         ])->findOrFail($id);
+
+        // Check if this is a local file media type
+        if ($channel->media_type === MediaType::LocalFile && $channel->local_file_path) {
+            return $this->streamLocalFile($channel->local_file_path);
+        }
 
         if ($uuid) {
             $playlist = PlaylistFacade::resolvePlaylistByUuid($uuid);
@@ -314,5 +326,55 @@ class M3uProxyApiController extends Controller
         }
 
         Log::info('Cache invalidated for m3u-proxy event', $data);
+    }
+
+    /**
+     * Stream a local media file with support for range requests
+     *
+     * @param  string  $filePath  The absolute path to the local file
+     * @return StreamedResponse|Response
+     */
+    protected function streamLocalFile(string $filePath)
+    {
+        // Security: Validate the file path to prevent directory traversal
+        $realPath = realpath($filePath);
+        if ($realPath === false || !file_exists($realPath)) {
+            Log::warning('Local file not found or inaccessible', ['path' => $filePath]);
+            return response()->json(['error' => 'File not found'], 404);
+        }
+
+        // Additional security: Ensure the file is readable
+        if (!is_readable($realPath)) {
+            Log::warning('Local file is not readable', ['path' => $realPath]);
+            return response()->json(['error' => 'File not accessible'], 403);
+        }
+
+        $fileSize = filesize($realPath);
+        $mimeType = mime_content_type($realPath) ?: 'application/octet-stream';
+
+        // Create a streamed response with range support
+        return response()->stream(
+            function () use ($realPath) {
+                $stream = fopen($realPath, 'rb');
+                if ($stream === false) {
+                    return;
+                }
+
+                // Stream in chunks
+                while (!feof($stream)) {
+                    echo fread($stream, 8192);
+                    flush();
+                }
+
+                fclose($stream);
+            },
+            200,
+            [
+                'Content-Type' => $mimeType,
+                'Content-Length' => $fileSize,
+                'Accept-Ranges' => 'bytes',
+                'Cache-Control' => 'no-cache, must-revalidate',
+            ]
+        );
     }
 }
