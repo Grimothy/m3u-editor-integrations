@@ -61,8 +61,8 @@ trait StreamsLocalFiles
                 $stream = @fopen($realPath, 'rb');
                 if ($stream === false) {
                     Log::error('Failed to open file for streaming', ['path' => $realPath]);
-                    // Output error message in response body
-                    echo json_encode(['error' => 'Failed to open file for streaming']);
+                    // Cannot output JSON here as Content-Type is already set to media type
+                    // Client will receive incomplete response which will trigger their error handling
                     return;
                 }
 
@@ -97,23 +97,34 @@ trait StreamsLocalFiles
      */
     protected function getAllowedMediaPaths(): array
     {
-        // Default allowed paths - can be configured via environment
+        // Get configured paths from environment/config
         $configuredPaths = config('media.allowed_paths', []);
         
-        // Add common media directories
-        $defaultPaths = [
-            '/media',
-            '/mnt/media',
-            '/data/media',
-            '/storage/media',
-        ];
+        // If no paths configured, use defaults; otherwise use only configured paths
+        if (empty($configuredPaths)) {
+            $configuredPaths = [
+                '/media',
+                '/mnt/media',
+                '/data/media',
+                '/storage/media',
+            ];
+        }
 
-        $allPaths = array_merge($configuredPaths, $defaultPaths);
+        // Resolve paths to their real paths, allowing non-existent paths for container mounts
+        $resolvedPaths = [];
+        foreach ($configuredPaths as $path) {
+            $path = trim($path);
+            if (empty($path)) {
+                continue;
+            }
+            
+            // If path exists, resolve it; otherwise use as-is (for future mounts)
+            $realPath = file_exists($path) ? realpath($path) : $path;
+            if ($realPath !== false && !in_array($realPath, $resolvedPaths)) {
+                $resolvedPaths[] = $realPath;
+            }
+        }
 
-        // Resolve all paths to their real paths and filter out invalid ones
-        return array_filter(array_map(function($path) {
-            $realPath = realpath($path);
-            return $realPath !== false ? $realPath : null;
-        }, $allPaths));
+        return array_unique($resolvedPaths);
     }
 }
