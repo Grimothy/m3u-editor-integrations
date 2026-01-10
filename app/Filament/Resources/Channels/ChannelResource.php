@@ -1034,6 +1034,21 @@ class ChannelResource extends Resource
                 ]),
             Fieldset::make('URL Settings')
                 ->schema([
+                    ToggleButtons::make('media_type')
+                        ->label('Media Type')
+                        ->options([
+                            'url' => 'URL',
+                            'local_file' => 'Local File',
+                        ])
+                        ->default('url')
+                        ->inline()
+                        ->live()
+                        ->columnSpan(2)
+                        ->hidden(fn (Get $get) => ! $get('is_custom'))
+                        ->hintIcon(
+                            'heroicon-m-question-mark-circle',
+                            tooltip: 'Choose whether to use a URL or a local media file for this channel.'
+                        ),
                     TextInput::make('url')
                         ->label(fn (Get $get) => $get('is_custom') ? 'URL' : 'Provider URL')
                         ->columnSpan(1)
@@ -1045,7 +1060,26 @@ class ChannelResource extends Resource
                         ->formatStateUsing(fn ($record) => $record?->url)
                         ->disabled(fn (Get $get) => ! $get('is_custom')) // make it read-only but copyable for non-custom channels
                         ->dehydrated(fn (Get $get) => $get('is_custom')) // don't save the value in the database for custom channels
-                        ->type('url'),
+                        ->type('url')
+                        ->hidden(fn (Get $get) => $get('is_custom') && $get('media_type') === 'local_file')
+                        ->required(fn (Get $get) => $get('is_custom') && $get('media_type') === 'url'),
+                    TextInput::make('local_file_path')
+                        ->label('Local File Path')
+                        ->columnSpan(1)
+                        ->prefixIcon('heroicon-m-document')
+                        ->placeholder('/path/to/your/media/file.mp4')
+                        ->hintIcon(
+                            'heroicon-m-question-mark-circle',
+                            tooltip: 'Enter the full path to the local media file on the server. Example: /media/movies/movie.mp4'
+                        )
+                        ->helperText('Enter the full path to a local media file accessible from the m3u-editor server.')
+                        ->hidden(fn (Get $get) => ! $get('is_custom') || $get('media_type') !== 'local_file')
+                        ->required(fn (Get $get) => $get('is_custom') && $get('media_type') === 'local_file')
+                        ->rules([
+                            'string',
+                            'min:1',
+                            'max:1000',
+                        ]),
                     TextInput::make('url_custom')
                         ->label('URL Override')
                         ->columnSpan(1)

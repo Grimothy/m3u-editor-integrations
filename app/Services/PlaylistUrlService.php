@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\MediaType;
 use App\Models\Channel;
 use App\Models\CustomPlaylist;
 use App\Models\Episode;
@@ -21,6 +22,12 @@ class PlaylistUrlService
      */
     public static function getChannelUrl(Channel $channel, $context = null): string
     {
+        // Check for local file media type
+        if ($channel->media_type === MediaType::LocalFile && $channel->local_file_path) {
+            // Return the local file path with file:// protocol
+            return 'file://' . $channel->local_file_path;
+        }
+
         // Always prefer custom URL if set (should not be transformed)
         if ($channel->url_custom) {
             return $channel->url_custom;
