@@ -76,16 +76,40 @@ The system implements several security measures:
    - Uses `realpath()` to resolve the actual file path
    - Prevents `../` attacks and symlink exploits
 
-2. **File Access Validation**
+2. **Allowed Directory Whitelist**
+   - Only files within configured allowed directories can be accessed
+   - Default allowed directories: `/media`, `/mnt/media`, `/data/media`, `/storage/media`
+   - Configure custom paths via `MEDIA_ALLOWED_PATHS` environment variable
+   - Example: `MEDIA_ALLOWED_PATHS="/media,/mnt/videos,/storage/media"`
+
+3. **File Access Validation**
    - Checks if the file exists before streaming
    - Verifies read permissions
    - Returns appropriate error codes for unauthorized access
 
-3. **Best Practices**
+4. **Best Practices**
    - Store media in dedicated directories
    - Use Docker volumes to control accessible paths
    - Set appropriate file system permissions
    - Consider using read-only mounts for security
+
+### Configuring Allowed Paths
+
+You can configure allowed media paths in two ways:
+
+1. **Environment Variable** (recommended for Docker):
+   ```env
+   MEDIA_ALLOWED_PATHS="/media,/mnt/videos,/custom/path"
+   ```
+
+2. **Config File** (`config/media.php`):
+   ```php
+   'allowed_paths' => [
+       '/media',
+       '/mnt/media',
+       '/your/custom/path',
+   ],
+   ```
 
 ### Recommended Security Setup
 
@@ -93,8 +117,11 @@ The system implements several security measures:
 # Docker compose example with read-only media mount
 services:
   m3u-editor:
+    environment:
+      - MEDIA_ALLOWED_PATHS=/media,/recordings
     volumes:
       - /path/to/media:/media:ro  # Read-only mount
+      - /path/to/recordings:/recordings:ro
 ```
 
 ## M3U Playlist Generation

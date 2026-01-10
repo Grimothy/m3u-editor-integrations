@@ -22,6 +22,24 @@ trait StreamsLocalFiles
             return response()->json(['error' => 'File not found'], 404);
         }
 
+        // Additional security: Restrict access to allowed base directories
+        $allowedPaths = $this->getAllowedMediaPaths();
+        $isAllowed = false;
+        foreach ($allowedPaths as $allowedPath) {
+            if (str_starts_with($realPath, $allowedPath)) {
+                $isAllowed = true;
+                break;
+            }
+        }
+
+        if (!$isAllowed) {
+            Log::warning('Access denied: File path not in allowed directories', [
+                'path' => $realPath,
+                'allowed_paths' => $allowedPaths,
+            ]);
+            return response()->json(['error' => 'Access denied'], 403);
+        }
+
         // Additional security: Ensure the file is readable
         if (!is_readable($realPath)) {
             Log::warning('Local file is not readable', ['path' => $realPath]);
@@ -37,25 +55,25 @@ trait StreamsLocalFiles
 
         $mimeType = mime_content_type($realPath) ?: 'application/octet-stream';
 
-        // Verify we can open the file before starting the response
-        $testStream = @fopen($realPath, 'rb');
-        if ($testStream === false) {
-            Log::warning('Unable to open file for streaming', ['path' => $realPath]);
-            return response()->json(['error' => 'Unable to open file for streaming'], 500);
-        }
-        fclose($testStream);
-
         // Create a streamed response with range support
         return response()->stream(
             function () use ($realPath) {
-                $stream = fopen($realPath, 'rb');
+                $stream = @fopen($realPath, 'rb');
                 if ($stream === false) {
+                    Log::error('Failed to open file for streaming', ['path' => $realPath]);
+                    // Output error message in response body
+                    echo json_encode(['error' => 'Failed to open file for streaming']);
                     return;
                 }
 
                 // Stream in larger chunks for better performance (64KB)
                 while (!feof($stream)) {
-                    echo fread($stream, 65536);
+                    $chunk = fread($stream, 65536);
+                    if ($chunk === false) {
+                        Log::error('Failed to read from file stream', ['path' => $realPath]);
+                        break;
+                    }
+                    echo $chunk;
                     flush();
                 }
 
@@ -69,5 +87,33 @@ trait StreamsLocalFiles
                 'Cache-Control' => 'no-cache, must-revalidate',
             ]
         );
+    }
+
+    /**
+     * Get allowed media paths for local file access
+     * Override this method in controllers if custom paths are needed
+     *
+     * @return array
+     */
+    protected function getAllowedMediaPaths(): array
+    {
+        // Default allowed paths - can be configured via environment
+        $configuredPaths = config('media.allowed_paths', []);
+        
+        // Add common media directories
+        $defaultPaths = [
+            '/media',
+            '/mnt/media',
+            '/data/media',
+            '/storage/media',
+        ];
+
+        $allPaths = array_merge($configuredPaths, $defaultPaths);
+
+        // Resolve all paths to their real paths and filter out invalid ones
+        return array_filter(array_map(function($path) {
+            $realPath = realpath($path);
+            return $realPath !== false ? $realPath : null;
+        }, $allPaths));
     }
 }

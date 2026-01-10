@@ -27,6 +27,38 @@ class Channel extends Model
     use HasTags;
 
     /**
+     * The attributes that are mass assignable.
+     *
+     * @var array
+     */
+    protected $fillable = [
+        'title',
+        'name',
+        'enabled',
+        'channel',
+        'shift',
+        'url',
+        'url_custom',
+        'logo',
+        'logo_internal',
+        'group',
+        'group_internal',
+        'stream_id',
+        'stream_id_custom',
+        'lang',
+        'country',
+        'user_id',
+        'playlist_id',
+        'group_id',
+        'custom_playlist_id',
+        'is_custom',
+        'is_vod',
+        'epg_channel_id',
+        'media_type',
+        'local_file_path',
+    ];
+
+    /**
      * The attributes that should be cast to native types.
      *
      * @var array
