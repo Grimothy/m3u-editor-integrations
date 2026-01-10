@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\ChannelLogoType;
+use App\Enums\MediaType;
 use App\Enums\PlaylistSourceType;
 use App\Facades\ProxyFacade;
 use App\Services\XtreamService;
@@ -26,6 +27,38 @@ class Channel extends Model
     use HasTags;
 
     /**
+     * The attributes that are mass assignable.
+     *
+     * @var array
+     */
+    protected $fillable = [
+        'title',
+        'name',
+        'enabled',
+        'channel',
+        'shift',
+        'url',
+        'url_custom',
+        'logo',
+        'logo_internal',
+        'group',
+        'group_internal',
+        'stream_id',
+        'stream_id_custom',
+        'lang',
+        'country',
+        'user_id',
+        'playlist_id',
+        'group_id',
+        'custom_playlist_id',
+        'is_custom',
+        'is_vod',
+        'epg_channel_id',
+        'media_type',
+        'local_file_path',
+    ];
+
+    /**
      * The attributes that should be cast to native types.
      *
      * @var array
@@ -47,6 +80,7 @@ class Channel extends Model
         'sync_settings' => 'array',
         'last_metadata_fetch' => 'datetime',
         'logo_type' => ChannelLogoType::class,
+        'media_type' => MediaType::class,
     ];
 
     public function user(): BelongsTo
@@ -164,6 +198,23 @@ class Channel extends Model
         return ProxyFacade::getProxyUrlForChannel(
             $this->id,
         );
+    }
+
+    /**
+     * Get the effective URL for the channel.
+     * Returns the local file path with file:// protocol or the regular URL.
+     *
+     * @return string|null
+     */
+    public function getEffectiveUrl(): ?string
+    {
+        if ($this->media_type === MediaType::LocalFile && $this->local_file_path) {
+            // Return file:// URL for local files
+            return 'file://' . $this->local_file_path;
+        }
+
+        // Return custom URL if set, otherwise return the original URL
+        return $this->url_custom ?? $this->url;
     }
 
     /**

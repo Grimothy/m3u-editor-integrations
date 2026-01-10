@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\MediaType;
 use App\Models\Channel;
 use App\Models\CustomPlaylist;
 use App\Models\Episode;
@@ -11,13 +12,16 @@ use App\Models\PlaylistAlias;
 use App\Models\PlaylistAuth;
 use App\Services\PlaylistService;
 use App\Services\PlaylistUrlService;
+use App\Traits\StreamsLocalFiles;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redirect;
 
 class XtreamStreamController extends Controller
 {
+    use StreamsLocalFiles;
     /**
      * Authenticates a playlist using either PlaylistAuth credentials or the original method
      * (username = playlist owner's name, password = playlist UUID).
@@ -198,6 +202,11 @@ class XtreamStreamController extends Controller
         [$playlist, $channel] = $this->findAuthenticatedPlaylistAndStreamModel($username, $password, $streamId, 'live');
 
         if ($channel instanceof Channel) {
+            // Check if this is a local file media type
+            if ($channel->media_type === MediaType::LocalFile && $channel->local_file_path) {
+                return $this->streamLocalFile($channel->local_file_path);
+            }
+
             if ($playlist->enable_proxy) {
                 // Timeshift handled in proxy controller (if needed)
                 return app()->call('App\\Http\\Controllers\\Api\\M3uProxyApiController@channel', [
@@ -235,6 +244,11 @@ class XtreamStreamController extends Controller
         $format = $format ?? 'ts'; // Default to 'ts' if no format provided
         [$playlist, $channel] = $this->findAuthenticatedPlaylistAndStreamModel($username, $password, $streamId, 'vod');
         if ($channel instanceof Channel) {
+            // Check if this is a local file media type
+            if ($channel->media_type === MediaType::LocalFile && $channel->local_file_path) {
+                return $this->streamLocalFile($channel->local_file_path);
+            }
+
             if ($playlist->enable_proxy) {
                 return app()->call('App\\Http\\Controllers\\Api\\M3uProxyApiController@channel', [
                     'id' => $streamId,

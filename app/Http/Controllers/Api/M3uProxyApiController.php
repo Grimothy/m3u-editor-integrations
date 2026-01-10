@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\MediaType;
 use App\Facades\PlaylistFacade;
 use App\Http\Controllers\Controller;
 use App\Models\Channel;
@@ -10,14 +11,17 @@ use App\Models\Playlist;
 use App\Models\StreamProfile;
 use App\Services\M3uProxyService;
 use App\Settings\GeneralSettings;
+use App\Traits\StreamsLocalFiles;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class M3uProxyApiController extends Controller
 {
+    use StreamsLocalFiles;
     /**
      * Get the proxied URL for a channel and redirect
      *
@@ -31,6 +35,11 @@ class M3uProxyApiController extends Controller
             'playlist',
             'customPlaylist',
         ])->findOrFail($id);
+
+        // Check if this is a local file media type
+        if ($channel->media_type === MediaType::LocalFile && $channel->local_file_path) {
+            return $this->streamLocalFile($channel->local_file_path);
+        }
 
         // See if username is passed in request
         $username = $request->input('username', null);
@@ -131,6 +140,11 @@ class M3uProxyApiController extends Controller
             'playlist',
             'customPlaylist',
         ])->findOrFail($id);
+
+        // Check if this is a local file media type
+        if ($channel->media_type === MediaType::LocalFile && $channel->local_file_path) {
+            return $this->streamLocalFile($channel->local_file_path);
+        }
 
         if ($uuid) {
             $playlist = PlaylistFacade::resolvePlaylistByUuid($uuid);
