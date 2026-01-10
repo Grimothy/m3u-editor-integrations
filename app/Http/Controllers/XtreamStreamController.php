@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\MediaType;
 use App\Models\Channel;
 use App\Models\CustomPlaylist;
 use App\Models\Episode;
@@ -14,6 +15,7 @@ use App\Services\PlaylistUrlService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redirect;
 
 class XtreamStreamController extends Controller
@@ -198,6 +200,11 @@ class XtreamStreamController extends Controller
         [$playlist, $channel] = $this->findAuthenticatedPlaylistAndStreamModel($username, $password, $streamId, 'live');
 
         if ($channel instanceof Channel) {
+            // Check if this is a local file media type
+            if ($channel->media_type === MediaType::LocalFile && $channel->local_file_path) {
+                return $this->streamLocalFile($channel->local_file_path);
+            }
+
             if ($playlist->enable_proxy) {
                 // Timeshift handled in proxy controller (if needed)
                 return app()->call('App\\Http\\Controllers\\Api\\M3uProxyApiController@channel', [
@@ -235,6 +242,11 @@ class XtreamStreamController extends Controller
         $format = $format ?? 'ts'; // Default to 'ts' if no format provided
         [$playlist, $channel] = $this->findAuthenticatedPlaylistAndStreamModel($username, $password, $streamId, 'vod');
         if ($channel instanceof Channel) {
+            // Check if this is a local file media type
+            if ($channel->media_type === MediaType::LocalFile && $channel->local_file_path) {
+                return $this->streamLocalFile($channel->local_file_path);
+            }
+
             if ($playlist->enable_proxy) {
                 return app()->call('App\\Http\\Controllers\\Api\\M3uProxyApiController@channel', [
                     'id' => $streamId,
@@ -325,5 +337,55 @@ class XtreamStreamController extends Controller
 
             return Redirect::to($streamUrl);
         }
+    }
+
+    /**
+     * Stream a local media file with support for range requests
+     *
+     * @param  string  $filePath  The absolute path to the local file
+     * @return \Symfony\Component\HttpFoundation\StreamedResponse|\Illuminate\Http\Response
+     */
+    protected function streamLocalFile(string $filePath)
+    {
+        // Security: Validate the file path to prevent directory traversal
+        $realPath = realpath($filePath);
+        if ($realPath === false || !file_exists($realPath)) {
+            Log::warning('Local file not found or inaccessible', ['path' => $filePath]);
+            return response()->json(['error' => 'File not found'], 404);
+        }
+
+        // Additional security: Ensure the file is readable
+        if (!is_readable($realPath)) {
+            Log::warning('Local file is not readable', ['path' => $realPath]);
+            return response()->json(['error' => 'File not accessible'], 403);
+        }
+
+        $fileSize = filesize($realPath);
+        $mimeType = mime_content_type($realPath) ?: 'application/octet-stream';
+
+        // Create a streamed response with range support
+        return response()->stream(
+            function () use ($realPath) {
+                $stream = fopen($realPath, 'rb');
+                if ($stream === false) {
+                    return;
+                }
+
+                // Stream in chunks
+                while (!feof($stream)) {
+                    echo fread($stream, 8192);
+                    flush();
+                }
+
+                fclose($stream);
+            },
+            200,
+            [
+                'Content-Type' => $mimeType,
+                'Content-Length' => $fileSize,
+                'Accept-Ranges' => 'bytes',
+                'Cache-Control' => 'no-cache, must-revalidate',
+            ]
+        );
     }
 }
